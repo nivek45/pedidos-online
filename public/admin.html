@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Painel administrativo - Gerencie produtos e pedidos">
+  <title>Admin | Pedidos Online</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="/" class="navbar-brand">🛍️ Pedidos Online</a>
+    <ul class="navbar-links">
+      <li><a href="/">Catálogo</a></li>
+      <li><a href="/cart.html">Carrinho <span class="cart-badge" id="cart-count">0</span></a></li>
+      <li><a href="/admin.html" class="active">Admin</a></li>
+    </ul>
+  </nav>
+
+  <!-- Conteúdo -->
+  <main class="container">
+    <h1 class="page-title">Painel Administrativo</h1>
+
+    <div id="alert-container"></div>
+
+    <div class="admin-layout">
+      <!-- Formulário de cadastro -->
+      <div class="card">
+        <h2 style="font-size:1.1rem; margin-bottom:20px;">Cadastrar Produto</h2>
+        <form id="product-form">
+          <div class="form-group">
+            <label for="prod-nome">Nome do produto *</label>
+            <input type="text" id="prod-nome" class="form-control" placeholder="Ex: Camiseta Básica" required>
+          </div>
+          <div class="form-group">
+            <label for="prod-descricao">Descrição</label>
+            <textarea id="prod-descricao" class="form-control" placeholder="Descrição breve do produto"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="prod-preco">Preço (R$) *</label>
+            <input type="number" id="prod-preco" class="form-control" placeholder="0.00" step="0.01" min="0.01" required>
+          </div>
+          <div class="form-group">
+            <label for="prod-imagem">URL da imagem</label>
+            <input type="url" id="prod-imagem" class="form-control" placeholder="https://exemplo.com/imagem.jpg">
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Cadastrar Produto</button>
+        </form>
+      </div>
+
+      <!-- Lista de produtos e pedidos -->
+      <div>
+        <!-- Produtos cadastrados -->
+        <div class="card" style="margin-bottom:24px;">
+          <h2 style="font-size:1.1rem; margin-bottom:16px;">Produtos Cadastrados</h2>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nome</th>
+                  <th>Preço</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="products-table">
+                <!-- Produtos via JS -->
+              </tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="empty-products" style="display:none; padding:24px;">
+            <p>Nenhum produto cadastrado.</p>
+          </div>
+        </div>
+
+        <!-- Pedidos recebidos -->
+        <div class="card">
+          <h2 style="font-size:1.1rem; margin-bottom:16px;">Pedidos Recebidos</h2>
+          <div id="orders-list">
+            <!-- Pedidos via JS -->
+          </div>
+          <div class="empty-state" id="empty-orders" style="display:none; padding:24px;">
+            <p>Nenhum pedido recebido ainda.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/cart-utils.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "pedidos-online",
+  "version": "1.0.0",
+  "description": "Sistema web de pedidos online",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "sql.js": "^1.10.3",
+    "cors": "^2.8.5"
+  }
+}
