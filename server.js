@@ -1,11 +1,19 @@
 // server.js - Servidor Express principal
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const path = require('path');
 const { initDB, queryAll, queryOne, runSQL, getLastInsertId, saveDB, getDB } = require('./database');
 
 const app = express();
 const PORT = 3000;
+
+// Credenciais do admin (em produção, usar hash e banco de dados)
+const ADMIN_USER = 'admin';
+const ADMIN_PASS = 'admin';
+
+// Tokens ativos (em memória — reiniciar o servidor invalida os tokens)
+const tokensAtivos = new Set();
 
 // Middlewares
 app.use(cors());
@@ -13,10 +21,54 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================
+// MIDDLEWARE DE AUTENTICAÇÃO
+// ============================================
+function authMiddleware(req, res, next) {
+  const token = req.headers['authorization'];
+
+  if (!token || !tokensAtivos.has(token)) {
+    return res.status(401).json({ erro: 'Não autorizado. Faça login.' });
+  }
+
+  next();
+}
+
+// ============================================
+// ROTA DE LOGIN
+// ============================================
+app.post('/api/login', (req, res) => {
+  const { usuario, senha } = req.body;
+
+  if (usuario === ADMIN_USER && senha === ADMIN_PASS) {
+    const token = crypto.randomBytes(32).toString('hex');
+    tokensAtivos.add(token);
+    return res.json({ token, mensagem: 'Login realizado com sucesso!' });
+  }
+
+  return res.status(401).json({ erro: 'Usuário ou senha incorretos.' });
+});
+
+// POST /api/logout - Invalida o token
+app.post('/api/logout', (req, res) => {
+  const token = req.headers['authorization'];
+  if (token) tokensAtivos.delete(token);
+  res.json({ mensagem: 'Logout realizado.' });
+});
+
+// GET /api/verificar-token - Verifica se o token é válido
+app.get('/api/verificar-token', (req, res) => {
+  const token = req.headers['authorization'];
+  if (token && tokensAtivos.has(token)) {
+    return res.json({ valido: true });
+  }
+  return res.status(401).json({ valido: false });
+});
+
+// ============================================
 // ROTAS DA API - PRODUTOS
 // ============================================
 
-// GET /api/produtos - Lista todos os produtos
+// GET /api/produtos - Lista todos os produtos (público)
 app.get('/api/produtos', (req, res) => {
   try {
     const produtos = queryAll('SELECT * FROM produtos ORDER BY id DESC');
@@ -27,7 +79,7 @@ app.get('/api/produtos', (req, res) => {
   }
 });
 
-// GET /api/produtos/:id - Busca um produto por ID
+// GET /api/produtos/:id - Busca um produto por ID (público)
 app.get('/api/produtos/:id', (req, res) => {
   try {
     const produto = queryOne('SELECT * FROM produtos WHERE id = ?', [parseInt(req.params.id)]);
@@ -39,11 +91,10 @@ app.get('/api/produtos/:id', (req, res) => {
   }
 });
 
-// POST /api/produtos - Cadastra um novo produto (Admin)
-app.post('/api/produtos', (req, res) => {
+// POST /api/produtos - Cadastra um novo produto (Admin - PROTEGIDO)
+app.post('/api/produtos', authMiddleware, (req, res) => {
   const { nome, descricao, preco, imagem_url } = req.body;
 
-  // Validação básica
   if (!nome || preco === undefined || preco === null) {
     return res.status(400).json({ erro: 'Nome e preço são obrigatórios.' });
   }
@@ -66,8 +117,8 @@ app.post('/api/produtos', (req, res) => {
   }
 });
 
-// DELETE /api/produtos/:id - Remove um produto (Admin)
-app.delete('/api/produtos/:id', (req, res) => {
+// DELETE /api/produtos/:id - Remove um produto (Admin - PROTEGIDO)
+app.delete('/api/produtos/:id', authMiddleware, (req, res) => {
   try {
     const produto = queryOne('SELECT * FROM produtos WHERE id = ?', [parseInt(req.params.id)]);
     if (!produto) return res.status(404).json({ erro: 'Produto não encontrado.' });
@@ -84,11 +135,10 @@ app.delete('/api/produtos/:id', (req, res) => {
 // ROTAS DA API - PEDIDOS
 // ============================================
 
-// POST /api/pedidos - Cria um novo pedido (Checkout)
+// POST /api/pedidos - Cria um novo pedido (Checkout - público)
 app.post('/api/pedidos', (req, res) => {
   const { cliente_nome, cliente_endereco, itens } = req.body;
 
-  // Validação
   if (!cliente_nome || !cliente_endereco) {
     return res.status(400).json({ erro: 'Nome e endereço são obrigatórios.' });
   }
@@ -97,7 +147,6 @@ app.post('/api/pedidos', (req, res) => {
   }
 
   try {
-    // Calcula o total e valida os produtos
     let total = 0;
     const itensValidados = [];
 
@@ -115,14 +164,12 @@ app.post('/api/pedidos', (req, res) => {
       });
     }
 
-    // Insere o pedido
     runSQL(
       'INSERT INTO pedidos (cliente_nome, cliente_endereco, total) VALUES (?, ?, ?)',
       [cliente_nome, cliente_endereco, total]
     );
     const pedidoId = getLastInsertId();
 
-    // Insere os itens do pedido
     for (const item of itensValidados) {
       runSQL(
         'INSERT INTO pedido_itens (pedido_id, produto_id, quantidade, preco_unitario) VALUES (?, ?, ?, ?)',
@@ -137,12 +184,11 @@ app.post('/api/pedidos', (req, res) => {
   }
 });
 
-// GET /api/pedidos - Lista todos os pedidos (Admin)
-app.get('/api/pedidos', (req, res) => {
+// GET /api/pedidos - Lista todos os pedidos (Admin - PROTEGIDO)
+app.get('/api/pedidos', authMiddleware, (req, res) => {
   try {
     const pedidos = queryAll('SELECT * FROM pedidos ORDER BY id DESC');
 
-    // Para cada pedido, busca os itens
     const pedidosComItens = pedidos.map(pedido => {
       const itens = queryAll(`
         SELECT pi.*, p.nome as produto_nome
@@ -167,7 +213,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Inicia o servidor (aguarda o banco inicializar primeiro)
+// Inicia o servidor
 async function start() {
   await initDB();
 
@@ -176,6 +222,7 @@ async function start() {
     console.log(`📦 Catálogo:  http://localhost:${PORT}`);
     console.log(`🛒 Carrinho:  http://localhost:${PORT}/cart.html`);
     console.log(`📋 Checkout:  http://localhost:${PORT}/checkout.html`);
+    console.log(`🔒 Login:     http://localhost:${PORT}/admin-login.html`);
     console.log(`⚙️  Admin:     http://localhost:${PORT}/admin.html`);
     console.log('');
   });

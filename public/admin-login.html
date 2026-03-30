@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Login administrativo">
+  <title>Login Admin | Pedidos Online</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .login-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 60px);
+    }
+    .login-card {
+      width: 100%;
+      max-width: 380px;
+      padding: 32px;
+    }
+    .login-card h1 {
+      font-size: 1.4rem;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .login-card p {
+      text-align: center;
+      color: var(--gray-500);
+      font-size: 0.9rem;
+      margin-bottom: 24px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="/" class="navbar-brand">🛍️ Pedidos Online</a>
+    <ul class="navbar-links">
+      <li><a href="/">Catálogo</a></li>
+      <li><a href="/cart.html">Carrinho <span class="cart-badge" id="cart-count">0</span></a></li>
+      <li><a href="/admin-login.html" class="active">Admin</a></li>
+    </ul>
+  </nav>
+
+  <!-- Login -->
+  <div class="login-wrapper">
+    <div class="card login-card">
+      <h1>🔒 Área Administrativa</h1>
+      <p>Faça login para acessar o painel.</p>
+
+      <div id="alert-container"></div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label for="usuario">Usuário</label>
+          <input type="text" id="usuario" class="form-control" placeholder="admin" required>
+        </div>
+        <div class="form-group">
+          <label for="senha">Senha</label>
+          <input type="password" id="senha" class="form-control" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/cart-utils.js"></script>
+  <script>
+    // Se já está logado, redireciona para o admin
+    if (localStorage.getItem('admin_token')) {
+      window.location.href = '/admin.html';
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const usuario = document.getElementById('usuario').value.trim();
+      const senha = document.getElementById('senha').value;
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario, senha })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.erro || 'Erro ao fazer login.');
+        }
+
+        // Salva o token e redireciona
+        localStorage.setItem('admin_token', data.token);
+        window.location.href = '/admin.html';
+
+      } catch (err) {
+        showAlert(err.message, 'error');
+      }
+    });
+  </script>
+</body>
+</html>

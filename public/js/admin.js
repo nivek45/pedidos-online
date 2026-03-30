@@ -1,8 +1,70 @@
-// admin.js - Lógica do painel administrativo
+// admin.js - Lógica do painel administrativo (com autenticação)
 
-document.addEventListener('DOMContentLoaded', () => {
+// Obtém o token salvo no localStorage
+function getToken() {
+  return localStorage.getItem('admin_token');
+}
+
+// Headers com autenticação
+function authHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': getToken()
+  };
+}
+
+// Verifica se está autenticado, senão redireciona para login
+async function checkAuth() {
+  const token = getToken();
+  if (!token) {
+    window.location.href = '/admin-login.html';
+    return false;
+  }
+
+  try {
+    const response = await fetch('/api/verificar-token', {
+      headers: { 'Authorization': token }
+    });
+
+    if (!response.ok) {
+      localStorage.removeItem('admin_token');
+      window.location.href = '/admin-login.html';
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    window.location.href = '/admin-login.html';
+    return false;
+  }
+}
+
+// Logout
+async function logout() {
+  const token = getToken();
+  if (token) {
+    await fetch('/api/logout', {
+      method: 'POST',
+      headers: { 'Authorization': token }
+    });
+  }
+  localStorage.removeItem('admin_token');
+  window.location.href = '/admin-login.html';
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  // Verifica autenticação antes de qualquer coisa
+  const autenticado = await checkAuth();
+  if (!autenticado) return;
+
   loadProducts();
   loadOrders();
+
+  // Botão de logout
+  document.getElementById('btn-logout').addEventListener('click', (e) => {
+    e.preventDefault();
+    logout();
+  });
 
   // Formulário de cadastro de produto
   const form = document.getElementById('product-form');
@@ -22,11 +84,16 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const response = await fetch('/api/produtos', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ nome, descricao, preco, imagem_url })
       });
 
       const data = await response.json();
+
+      if (response.status === 401) {
+        logout();
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.erro || 'Erro ao cadastrar produto.');
@@ -34,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       showAlert(`Produto "${nome}" cadastrado com sucesso!`);
       form.reset();
-      loadProducts(); // Recarrega a lista
+      loadProducts();
 
     } catch (err) {
       showAlert(err.message, 'error');
@@ -83,8 +150,17 @@ async function deleteProduct(id, nome) {
   if (!confirm(`Deseja excluir o produto "${nome}"?`)) return;
 
   try {
-    const response = await fetch(`/api/produtos/${id}`, { method: 'DELETE' });
+    const response = await fetch(`/api/produtos/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+
     const data = await response.json();
+
+    if (response.status === 401) {
+      logout();
+      return;
+    }
 
     if (!response.ok) throw new Error(data.erro);
 
@@ -102,7 +178,15 @@ async function loadOrders() {
   const emptyEl = document.getElementById('empty-orders');
 
   try {
-    const response = await fetch('/api/pedidos');
+    const response = await fetch('/api/pedidos', {
+      headers: authHeaders()
+    });
+
+    if (response.status === 401) {
+      logout();
+      return;
+    }
+
     const pedidos = await response.json();
 
     if (pedidos.length === 0) {
