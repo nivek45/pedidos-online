@@ -1,70 +1,33 @@
-// admin.js - Lógica do painel administrativo (com autenticação)
+// admin.js - Lógica do painel administrativo (com autenticação via auth.js)
 
-// Obtém o token salvo no localStorage
-function getToken() {
-  return localStorage.getItem('admin_token');
-}
-
-// Headers com autenticação
-function authHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': getToken()
-  };
-}
-
-// Verifica se está autenticado, senão redireciona para login
-async function checkAuth() {
-  const token = getToken();
-  if (!token) {
+// Verifica se está autenticado como admin, senão redireciona para login
+async function checkAdminAuth() {
+  if (!Auth.isLoggedIn()) {
     window.location.href = '/admin-login.html';
     return false;
   }
 
-  try {
-    const response = await fetch('/api/verificar-token', {
-      headers: { 'Authorization': token }
-    });
-
-    if (!response.ok) {
-      localStorage.removeItem('admin_token');
-      window.location.href = '/admin-login.html';
-      return false;
-    }
-
-    return true;
-  } catch (err) {
+  const valido = await Auth.verify();
+  if (!valido) {
     window.location.href = '/admin-login.html';
     return false;
   }
-}
 
-// Logout
-async function logout() {
-  const token = getToken();
-  if (token) {
-    await fetch('/api/logout', {
-      method: 'POST',
-      headers: { 'Authorization': token }
-    });
+  if (!Auth.isAdmin()) {
+    window.location.href = '/';
+    return false;
   }
-  localStorage.removeItem('admin_token');
-  window.location.href = '/admin-login.html';
+
+  return true;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Verifica autenticação antes de qualquer coisa
-  const autenticado = await checkAuth();
+  // Verifica autenticação de admin antes de qualquer coisa
+  const autenticado = await checkAdminAuth();
   if (!autenticado) return;
 
   loadProducts();
   loadOrders();
-
-  // Botão de logout
-  document.getElementById('btn-logout').addEventListener('click', (e) => {
-    e.preventDefault();
-    logout();
-  });
 
   // Formulário de cadastro de produto
   const form = document.getElementById('product-form');
@@ -84,14 +47,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const response = await fetch('/api/produtos', {
         method: 'POST',
-        headers: authHeaders(),
+        headers: Auth.headers(),
         body: JSON.stringify({ nome, descricao, preco, imagem_url })
       });
 
       const data = await response.json();
 
-      if (response.status === 401) {
-        logout();
+      if (response.status === 401 || response.status === 403) {
+        Auth.clear();
+        window.location.href = '/admin-login.html';
         return;
       }
 
@@ -152,13 +116,14 @@ async function deleteProduct(id, nome) {
   try {
     const response = await fetch(`/api/produtos/${id}`, {
       method: 'DELETE',
-      headers: authHeaders()
+      headers: Auth.headers()
     });
 
     const data = await response.json();
 
-    if (response.status === 401) {
-      logout();
+    if (response.status === 401 || response.status === 403) {
+      Auth.clear();
+      window.location.href = '/admin-login.html';
       return;
     }
 
@@ -179,11 +144,12 @@ async function loadOrders() {
 
   try {
     const response = await fetch('/api/pedidos', {
-      headers: authHeaders()
+      headers: Auth.headers()
     });
 
-    if (response.status === 401) {
-      logout();
+    if (response.status === 401 || response.status === 403) {
+      Auth.clear();
+      window.location.href = '/admin-login.html';
       return;
     }
 

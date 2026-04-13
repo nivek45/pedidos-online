@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Entrar ou criar conta - Pedidos Online">
+  <title>Login | Pedidos Online</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="/" class="navbar-brand">🛍️ Pedidos Online</a>
+    <ul class="navbar-links">
+      <li><a href="/">Catálogo</a></li>
+      <li><a href="/cart.html">Carrinho <span class="cart-badge" id="cart-count">0</span></a></li>
+    </ul>
+  </nav>
+
+  <!-- Login / Registro -->
+  <div class="login-wrapper">
+    <div class="card login-card">
+      <div class="login-header">
+        <h1>🔑 Bem-vindo</h1>
+        <p>Entre ou crie sua conta para fazer pedidos</p>
+      </div>
+
+      <!-- Tabs -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login" data-tab="login">Entrar</button>
+        <button class="auth-tab" id="tab-register" data-tab="register">Criar Conta</button>
+      </div>
+
+      <div id="alert-container"></div>
+
+      <!-- Formulário de Login -->
+      <form id="login-form" class="auth-form active">
+        <div class="form-group">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" class="form-control" placeholder="seu@email.com" required>
+        </div>
+        <div class="form-group">
+          <label for="login-senha">Senha</label>
+          <input type="password" id="login-senha" class="form-control" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="btn-login">
+          Entrar
+        </button>
+      </form>
+
+      <!-- Formulário de Registro -->
+      <form id="register-form" class="auth-form" style="display:none;">
+        <div class="form-group">
+          <label for="reg-nome">Nome completo</label>
+          <input type="text" id="reg-nome" class="form-control" placeholder="Seu nome" required>
+        </div>
+        <div class="form-group">
+          <label for="reg-email">Email</label>
+          <input type="email" id="reg-email" class="form-control" placeholder="seu@email.com" required>
+        </div>
+        <div class="form-group">
+          <label for="reg-senha">Senha</label>
+          <input type="password" id="reg-senha" class="form-control" placeholder="Mínimo 4 caracteres" minlength="4" required>
+        </div>
+        <div class="form-group">
+          <label for="reg-endereco">Endereço de entrega <small style="color:var(--gray-500);">(opcional)</small></label>
+          <textarea id="reg-endereco" class="form-control" placeholder="Rua, número, bairro, cidade - CEP"></textarea>
+        </div>
+        <button type="submit" class="btn btn-success btn-block" id="btn-register">
+          Criar Conta
+        </button>
+      </form>
+
+      <div class="login-footer">
+        <a href="/admin-login.html">Acesso administrativo →</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/cart-utils.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    // Se já está logado, redireciona
+    if (Auth.isLoggedIn()) {
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get('redirect');
+      window.location.href = redirect ? '/' + redirect : '/';
+    }
+
+    // Tabs
+    const tabs = document.querySelectorAll('.auth-tab');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        if (tab.dataset.tab === 'login') {
+          loginForm.style.display = 'block';
+          registerForm.style.display = 'none';
+        } else {
+          loginForm.style.display = 'none';
+          registerForm.style.display = 'block';
+        }
+
+        document.getElementById('alert-container').innerHTML = '';
+      });
+    });
+
+    // Login
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-login');
+      const email = document.getElementById('login-email').value.trim();
+      const senha = document.getElementById('login-senha').value;
+
+      btn.disabled = true;
+      btn.textContent = 'Entrando...';
+
+      try {
+        await Auth.login(email, senha);
+        const params = new URLSearchParams(window.location.search);
+        const redirect = params.get('redirect');
+        window.location.href = redirect ? '/' + redirect : '/';
+      } catch (err) {
+        showAlert(err.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+      }
+    });
+
+    // Registro
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-register');
+      const nome = document.getElementById('reg-nome').value.trim();
+      const email = document.getElementById('reg-email').value.trim();
+      const senha = document.getElementById('reg-senha').value;
+      const endereco = document.getElementById('reg-endereco').value.trim();
+
+      btn.disabled = true;
+      btn.textContent = 'Criando conta...';
+
+      try {
+        await Auth.register(nome, email, senha, endereco);
+        const params = new URLSearchParams(window.location.search);
+        const redirect = params.get('redirect');
+        window.location.href = redirect ? '/' + redirect : '/';
+      } catch (err) {
+        showAlert(err.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Criar Conta';
+      }
+    });
+  </script>
+</body>
+</html>

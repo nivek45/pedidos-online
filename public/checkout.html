@@ -15,7 +15,6 @@
     <ul class="navbar-links">
       <li><a href="/">Catálogo</a></li>
       <li><a href="/cart.html">Carrinho <span class="cart-badge" id="cart-count">0</span></a></li>
-      <li><a href="/admin-login.html">Admin</a></li>
     </ul>
   </nav>
 
@@ -25,7 +24,14 @@
 
     <div id="alert-container"></div>
 
-    <div class="layout-two-col">
+    <!-- Aviso de login necessário -->
+    <div class="card" id="login-required" style="display:none; text-align:center; padding:48px;">
+      <h2 style="margin-bottom:12px;">🔑 Login Necessário</h2>
+      <p style="color:var(--gray-500); margin-bottom:24px;">Faça login ou crie uma conta para finalizar seu pedido.</p>
+      <a href="/login.html?redirect=checkout.html" class="btn btn-primary">Entrar / Criar Conta</a>
+    </div>
+
+    <div class="layout-two-col" id="checkout-content">
       <!-- Formulário -->
       <div class="card">
         <h2 style="font-size:1.1rem; margin-bottom:20px;">Dados para entrega</h2>
@@ -61,11 +67,15 @@
       <h2 style="color:var(--success); margin-bottom:12px;">✅ Pedido Confirmado!</h2>
       <p style="margin-bottom:8px;">Seu pedido <strong id="order-id"></strong> foi registrado com sucesso.</p>
       <p style="color:var(--gray-500); margin-bottom:24px;">Obrigado pela sua compra!</p>
-      <a href="/" class="btn btn-primary">Voltar ao catálogo</a>
+      <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+        <a href="/" class="btn btn-primary">Voltar ao catálogo</a>
+        <a href="/meus-pedidos.html" class="btn btn-outline">Ver meus pedidos</a>
+      </div>
     </div>
   </main>
 
   <script src="/js/cart-utils.js"></script>
+  <script src="/js/auth.js"></script>
   <script src="/js/checkout.js"></script>
 </body>
 </html>

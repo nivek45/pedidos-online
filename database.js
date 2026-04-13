@@ -2,10 +2,16 @@
 const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const DB_PATH = path.join(__dirname, 'pedidos.db');
 
 let db = null;
+
+// Gera hash SHA-256 da senha
+function hashSenha(senha) {
+  return crypto.createHash('sha256').update(senha).digest('hex');
+}
 
 // Inicializa o banco de dados
 async function initDB() {
@@ -34,13 +40,27 @@ async function initDB() {
   `);
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS usuarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      senha TEXT NOT NULL,
+      endereco TEXT DEFAULT '',
+      role TEXT DEFAULT 'user',
+      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS pedidos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       cliente_nome TEXT NOT NULL,
       cliente_endereco TEXT NOT NULL,
       total REAL NOT NULL,
       status TEXT DEFAULT 'pendente',
-      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+      usuario_id INTEGER DEFAULT NULL,
+      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
     )
   `);
 
@@ -55,6 +75,25 @@ async function initDB() {
       FOREIGN KEY (produto_id) REFERENCES produtos(id)
     )
   `);
+
+  // Adiciona coluna usuario_id se não existir (para bancos antigos)
+  try {
+    db.run('SELECT usuario_id FROM pedidos LIMIT 1');
+  } catch (e) {
+    db.run('ALTER TABLE pedidos ADD COLUMN usuario_id INTEGER DEFAULT NULL');
+    console.log('🔄 Coluna usuario_id adicionada à tabela pedidos.');
+  }
+
+  // Cria admin padrão se não existir nenhum admin
+  const adminCount = db.exec("SELECT COUNT(*) as total FROM usuarios WHERE role = 'admin'");
+  const totalAdmins = adminCount[0].values[0][0];
+
+  if (totalAdmins === 0) {
+    const stmt = db.prepare('INSERT INTO usuarios (nome, email, senha, role) VALUES (?, ?, ?, ?)');
+    stmt.run(['Administrador', 'admin@admin.com', hashSenha('admin123'), 'admin']);
+    stmt.free();
+    console.log('👤 Admin padrão criado (email: admin@admin.com, senha: admin123)');
+  }
 
   // Insere produtos de exemplo se a tabela estiver vazia
   const count = db.exec('SELECT COUNT(*) as total FROM produtos');
@@ -79,6 +118,7 @@ async function initDB() {
     console.log('✅ Produtos de exemplo inseridos no banco de dados.');
   }
 
+  saveDB();
   return db;
 }
 
@@ -127,4 +167,4 @@ function getLastInsertId() {
   return result[0].values[0][0];
 }
 
-module.exports = { initDB, getDB, saveDB, queryAll, queryOne, runSQL, getLastInsertId };
+module.exports = { initDB, getDB, saveDB, queryAll, queryOne, runSQL, getLastInsertId, hashSenha };

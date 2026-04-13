@@ -1,17 +1,40 @@
 // checkout.js - Lógica da página de finalização de pedido
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const items = Cart.getItems();
   const form = document.getElementById('checkout-form');
   const orderSummary = document.getElementById('order-summary');
   const orderTotal = document.getElementById('order-total');
   const successPanel = document.getElementById('order-success');
-  const layoutEl = document.querySelector('.layout-two-col');
+  const checkoutContent = document.getElementById('checkout-content');
+  const loginRequired = document.getElementById('login-required');
 
   // Se carrinho vazio, redireciona
   if (items.length === 0) {
     window.location.href = '/cart.html';
     return;
+  }
+
+  // Verifica se o usuário está logado
+  if (!Auth.isLoggedIn()) {
+    checkoutContent.style.display = 'none';
+    loginRequired.style.display = 'block';
+    return;
+  }
+
+  // Verifica se token é válido
+  const valido = await Auth.verify();
+  if (!valido) {
+    checkoutContent.style.display = 'none';
+    loginRequired.style.display = 'block';
+    return;
+  }
+
+  // Pré-preenche dados do perfil
+  const user = Auth.getUser();
+  if (user) {
+    document.getElementById('nome').value = user.nome || '';
+    document.getElementById('endereco').value = user.endereco || '';
   }
 
   // Renderiza resumo do pedido
@@ -44,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const response = await fetch('/api/pedidos', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: Auth.headers(),
         body: JSON.stringify({
           cliente_nome: nome,
           cliente_endereco: endereco,
@@ -57,6 +80,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const data = await response.json();
 
+      if (response.status === 401) {
+        Auth.clear();
+        checkoutContent.style.display = 'none';
+        loginRequired.style.display = 'block';
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(data.erro || 'Erro ao enviar pedido.');
       }
@@ -64,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Sucesso: limpa carrinho e mostra confirmação
       Cart.clear();
 
-      layoutEl.style.display = 'none';
+      checkoutContent.style.display = 'none';
       successPanel.style.display = 'block';
       document.getElementById('order-id').textContent = `#${data.pedido_id}`;
 

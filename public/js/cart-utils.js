@@ -1,18 +1,26 @@
 // cart-utils.js - Funções utilitárias para gerenciamento do carrinho (localStorage)
 
 const Cart = {
-  // Chave do localStorage
-  STORAGE_KEY: 'carrinho',
+  // Retorna a chave do localStorage baseada no usuário logado
+  getStorageKey() {
+    if (typeof Auth !== 'undefined' && Auth.isLoggedIn()) {
+      const user = Auth.getUser();
+      if (user && user.id) {
+        return 'carrinho_user_' + user.id;
+      }
+    }
+    return 'carrinho_guest';
+  },
 
   // Retorna todos os itens do carrinho
   getItems() {
-    const data = localStorage.getItem(this.STORAGE_KEY);
+    const data = localStorage.getItem(this.getStorageKey());
     return data ? JSON.parse(data) : [];
   },
 
   // Salva os itens no localStorage
   saveItems(items) {
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(this.getStorageKey(), JSON.stringify(items));
     this.updateBadge();
   },
 
@@ -71,10 +79,17 @@ const Cart = {
     return this.getItems().reduce((sum, item) => sum + item.quantidade, 0);
   },
 
-  // Limpa o carrinho
+  // Limpa o carrinho do usuário atual
   clear() {
-    localStorage.removeItem(this.STORAGE_KEY);
+    localStorage.removeItem(this.getStorageKey());
     this.updateBadge();
+  },
+
+  // Limpa o carrinho do visitante (guest) — usado ao fazer login
+  clearGuest() {
+    localStorage.removeItem('carrinho_guest');
+    // Limpa também a chave antiga 'carrinho' de versões anteriores
+    localStorage.removeItem('carrinho');
   },
 
   // Atualiza o badge do carrinho na navbar

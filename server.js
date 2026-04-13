@@ -3,17 +3,13 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const path = require('path');
-const { initDB, queryAll, queryOne, runSQL, getLastInsertId, saveDB, getDB } = require('./database');
+const { initDB, queryAll, queryOne, runSQL, getLastInsertId, saveDB, getDB, hashSenha } = require('./database');
 
 const app = express();
 const PORT = 3000;
 
-// Credenciais do admin (em produção, usar hash e banco de dados)
-const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'admin';
-
-// Tokens ativos (em memória — reiniciar o servidor invalida os tokens)
-const tokensAtivos = new Set();
+// Tokens ativos: Map de token → { id, nome, email, role }
+const tokensAtivos = new Map();
 
 // Middlewares
 app.use(cors());
@@ -21,7 +17,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================
-// MIDDLEWARE DE AUTENTICAÇÃO
+// MIDDLEWARE DE AUTENTICAÇÃO (qualquer usuário logado)
 // ============================================
 function authMiddleware(req, res, next) {
   const token = req.headers['authorization'];
@@ -30,22 +26,96 @@ function authMiddleware(req, res, next) {
     return res.status(401).json({ erro: 'Não autorizado. Faça login.' });
   }
 
+  req.user = tokensAtivos.get(token);
   next();
 }
 
 // ============================================
-// ROTA DE LOGIN
+// MIDDLEWARE DE ADMIN (somente administradores)
 // ============================================
-app.post('/api/login', (req, res) => {
-  const { usuario, senha } = req.body;
+function adminMiddleware(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ erro: 'Acesso negado. Permissão de administrador necessária.' });
+  }
+  next();
+}
 
-  if (usuario === ADMIN_USER && senha === ADMIN_PASS) {
-    const token = crypto.randomBytes(32).toString('hex');
-    tokensAtivos.add(token);
-    return res.json({ token, mensagem: 'Login realizado com sucesso!' });
+// ============================================
+// ROTA DE REGISTRO (usuário comum)
+// ============================================
+app.post('/api/registro', (req, res) => {
+  const { nome, email, senha, endereco } = req.body;
+
+  if (!nome || !email || !senha) {
+    return res.status(400).json({ erro: 'Nome, email e senha são obrigatórios.' });
   }
 
-  return res.status(401).json({ erro: 'Usuário ou senha incorretos.' });
+  if (senha.length < 4) {
+    return res.status(400).json({ erro: 'A senha deve ter pelo menos 4 caracteres.' });
+  }
+
+  // Verifica se email já existe
+  const existente = queryOne('SELECT id FROM usuarios WHERE email = ?', [email.toLowerCase().trim()]);
+  if (existente) {
+    return res.status(409).json({ erro: 'Este email já está cadastrado.' });
+  }
+
+  try {
+    runSQL(
+      'INSERT INTO usuarios (nome, email, senha, endereco, role) VALUES (?, ?, ?, ?, ?)',
+      [nome.trim(), email.toLowerCase().trim(), hashSenha(senha), endereco || '', 'user']
+    );
+
+    const id = getLastInsertId();
+    const token = crypto.randomBytes(32).toString('hex');
+    const userData = { id, nome: nome.trim(), email: email.toLowerCase().trim(), role: 'user', endereco: endereco || '' };
+    tokensAtivos.set(token, userData);
+
+    return res.status(201).json({
+      token,
+      usuario: userData,
+      mensagem: 'Conta criada com sucesso!'
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ erro: 'Erro ao criar conta.' });
+  }
+});
+
+// ============================================
+// ROTA DE LOGIN (unificada: admin e usuário)
+// ============================================
+app.post('/api/login', (req, res) => {
+  const { email, senha } = req.body;
+
+  if (!email || !senha) {
+    return res.status(400).json({ erro: 'Email e senha são obrigatórios.' });
+  }
+
+  const usuario = queryOne(
+    'SELECT * FROM usuarios WHERE email = ? AND senha = ?',
+    [email.toLowerCase().trim(), hashSenha(senha)]
+  );
+
+  if (!usuario) {
+    return res.status(401).json({ erro: 'Email ou senha incorretos.' });
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const userData = {
+    id: usuario.id,
+    nome: usuario.nome,
+    email: usuario.email,
+    role: usuario.role,
+    endereco: usuario.endereco || ''
+  };
+  tokensAtivos.set(token, userData);
+
+  return res.json({
+    token,
+    usuario: userData,
+    mensagem: 'Login realizado com sucesso!'
+  });
 });
 
 // POST /api/logout - Invalida o token
@@ -59,9 +129,17 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/verificar-token', (req, res) => {
   const token = req.headers['authorization'];
   if (token && tokensAtivos.has(token)) {
-    return res.json({ valido: true });
+    const user = tokensAtivos.get(token);
+    return res.json({ valido: true, usuario: user });
   }
   return res.status(401).json({ valido: false });
+});
+
+// GET /api/perfil - Retorna dados do perfil do usuário logado
+app.get('/api/perfil', authMiddleware, (req, res) => {
+  const usuario = queryOne('SELECT id, nome, email, endereco, role, criado_em FROM usuarios WHERE id = ?', [req.user.id]);
+  if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado.' });
+  res.json(usuario);
 });
 
 // ============================================
@@ -92,7 +170,7 @@ app.get('/api/produtos/:id', (req, res) => {
 });
 
 // POST /api/produtos - Cadastra um novo produto (Admin - PROTEGIDO)
-app.post('/api/produtos', authMiddleware, (req, res) => {
+app.post('/api/produtos', authMiddleware, adminMiddleware, (req, res) => {
   const { nome, descricao, preco, imagem_url } = req.body;
 
   if (!nome || preco === undefined || preco === null) {
@@ -118,7 +196,7 @@ app.post('/api/produtos', authMiddleware, (req, res) => {
 });
 
 // DELETE /api/produtos/:id - Remove um produto (Admin - PROTEGIDO)
-app.delete('/api/produtos/:id', authMiddleware, (req, res) => {
+app.delete('/api/produtos/:id', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const produto = queryOne('SELECT * FROM produtos WHERE id = ?', [parseInt(req.params.id)]);
     if (!produto) return res.status(404).json({ erro: 'Produto não encontrado.' });
@@ -135,8 +213,8 @@ app.delete('/api/produtos/:id', authMiddleware, (req, res) => {
 // ROTAS DA API - PEDIDOS
 // ============================================
 
-// POST /api/pedidos - Cria um novo pedido (Checkout - público)
-app.post('/api/pedidos', (req, res) => {
+// POST /api/pedidos - Cria um novo pedido (requer login de usuário)
+app.post('/api/pedidos', authMiddleware, (req, res) => {
   const { cliente_nome, cliente_endereco, itens } = req.body;
 
   if (!cliente_nome || !cliente_endereco) {
@@ -165,8 +243,8 @@ app.post('/api/pedidos', (req, res) => {
     }
 
     runSQL(
-      'INSERT INTO pedidos (cliente_nome, cliente_endereco, total) VALUES (?, ?, ?)',
-      [cliente_nome, cliente_endereco, total]
+      'INSERT INTO pedidos (cliente_nome, cliente_endereco, total, usuario_id) VALUES (?, ?, ?, ?)',
+      [cliente_nome, cliente_endereco, total, req.user.id]
     );
     const pedidoId = getLastInsertId();
 
@@ -184,8 +262,30 @@ app.post('/api/pedidos', (req, res) => {
   }
 });
 
+// GET /api/meus-pedidos - Lista pedidos do usuário logado
+app.get('/api/meus-pedidos', authMiddleware, (req, res) => {
+  try {
+    const pedidos = queryAll('SELECT * FROM pedidos WHERE usuario_id = ? ORDER BY id DESC', [req.user.id]);
+
+    const pedidosComItens = pedidos.map(pedido => {
+      const itens = queryAll(`
+        SELECT pi.*, p.nome as produto_nome
+        FROM pedido_itens pi
+        JOIN produtos p ON pi.produto_id = p.id
+        WHERE pi.pedido_id = ?
+      `, [pedido.id]);
+      return { ...pedido, itens };
+    });
+
+    res.json(pedidosComItens);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar seus pedidos.' });
+  }
+});
+
 // GET /api/pedidos - Lista todos os pedidos (Admin - PROTEGIDO)
-app.get('/api/pedidos', authMiddleware, (req, res) => {
+app.get('/api/pedidos', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const pedidos = queryAll('SELECT * FROM pedidos ORDER BY id DESC');
 
@@ -219,11 +319,13 @@ async function start() {
 
   app.listen(PORT, () => {
     console.log(`\n🚀 Servidor rodando em http://localhost:${PORT}`);
-    console.log(`📦 Catálogo:  http://localhost:${PORT}`);
-    console.log(`🛒 Carrinho:  http://localhost:${PORT}/cart.html`);
-    console.log(`📋 Checkout:  http://localhost:${PORT}/checkout.html`);
-    console.log(`🔒 Login:     http://localhost:${PORT}/admin-login.html`);
-    console.log(`⚙️  Admin:     http://localhost:${PORT}/admin.html`);
+    console.log(`📦 Catálogo:      http://localhost:${PORT}`);
+    console.log(`🛒 Carrinho:      http://localhost:${PORT}/cart.html`);
+    console.log(`📋 Checkout:      http://localhost:${PORT}/checkout.html`);
+    console.log(`🔑 Login:         http://localhost:${PORT}/login.html`);
+    console.log(`📦 Meus Pedidos:  http://localhost:${PORT}/meus-pedidos.html`);
+    console.log(`🔒 Admin Login:   http://localhost:${PORT}/admin-login.html`);
+    console.log(`⚙️  Admin:         http://localhost:${PORT}/admin.html`);
     console.log('');
   });
 }

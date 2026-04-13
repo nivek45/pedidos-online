@@ -6,30 +6,6 @@
   <meta name="description" content="Login administrativo">
   <title>Login Admin | Pedidos Online</title>
   <link rel="stylesheet" href="/css/style.css">
-  <style>
-    .login-wrapper {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: calc(100vh - 60px);
-    }
-    .login-card {
-      width: 100%;
-      max-width: 380px;
-      padding: 32px;
-    }
-    .login-card h1 {
-      font-size: 1.4rem;
-      text-align: center;
-      margin-bottom: 8px;
-    }
-    .login-card p {
-      text-align: center;
-      color: var(--gray-500);
-      font-size: 0.9rem;
-      margin-bottom: 24px;
-    }
-  </style>
 </head>
 <body>
 
@@ -39,64 +15,67 @@
     <ul class="navbar-links">
       <li><a href="/">Catálogo</a></li>
       <li><a href="/cart.html">Carrinho <span class="cart-badge" id="cart-count">0</span></a></li>
-      <li><a href="/admin-login.html" class="active">Admin</a></li>
     </ul>
   </nav>
 
   <!-- Login -->
   <div class="login-wrapper">
     <div class="card login-card">
-      <h1>🔒 Área Administrativa</h1>
-      <p>Faça login para acessar o painel.</p>
+      <div class="login-header">
+        <h1>🔒 Área Administrativa</h1>
+        <p>Faça login com conta de administrador.</p>
+      </div>
 
       <div id="alert-container"></div>
 
       <form id="login-form">
         <div class="form-group">
-          <label for="usuario">Usuário</label>
-          <input type="text" id="usuario" class="form-control" placeholder="admin" required>
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" class="form-control" placeholder="admin@admin.com" required>
         </div>
         <div class="form-group">
-          <label for="senha">Senha</label>
-          <input type="password" id="senha" class="form-control" placeholder="••••••••" required>
+          <label for="login-senha">Senha</label>
+          <input type="password" id="login-senha" class="form-control" placeholder="••••••••" required>
         </div>
-        <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+        <button type="submit" class="btn btn-primary btn-block" id="btn-login">Entrar como Admin</button>
       </form>
+
+      <div class="login-footer">
+        <a href="/login.html">← Voltar para login de usuário</a>
+      </div>
     </div>
   </div>
 
   <script src="/js/cart-utils.js"></script>
+  <script src="/js/auth.js"></script>
   <script>
-    // Se já está logado, redireciona para o admin
-    if (localStorage.getItem('admin_token')) {
+    // Se já é admin logado, redireciona
+    if (Auth.isLoggedIn() && Auth.isAdmin()) {
       window.location.href = '/admin.html';
     }
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const btn = document.getElementById('btn-login');
+      const email = document.getElementById('login-email').value.trim();
+      const senha = document.getElementById('login-senha').value;
 
-      const usuario = document.getElementById('usuario').value.trim();
-      const senha = document.getElementById('senha').value;
+      btn.disabled = true;
+      btn.textContent = 'Entrando...';
 
       try {
-        const response = await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usuario, senha })
-        });
+        const data = await Auth.login(email, senha);
 
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.erro || 'Erro ao fazer login.');
+        if (data.usuario.role !== 'admin') {
+          Auth.clear();
+          throw new Error('Esta conta não possui permissão de administrador.');
         }
 
-        // Salva o token e redireciona
-        localStorage.setItem('admin_token', data.token);
         window.location.href = '/admin.html';
-
       } catch (err) {
         showAlert(err.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Entrar como Admin';
       }
     });
   </script>
